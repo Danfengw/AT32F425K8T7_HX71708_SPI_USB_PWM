@@ -53,7 +53,12 @@ void wk_exint_config(void)
   gpio_default_para_init(&gpio_init_struct);
   gpio_init_struct.gpio_mode = GPIO_MODE_INPUT;
   gpio_init_struct.gpio_pins = DOUT_RR_PIN;
-  gpio_init_struct.gpio_pull = GPIO_PULL_NONE;
+  /* pull up here (not PULL_NONE) so dout_rr is never floating for the
+     brief window between this call and wk_hx71708_init() reconfiguring
+     it later in main() - there's no external pull on this net (see
+     schematic), so leaving it floating while the falling-edge exint is
+     already armed is a real gap for a spurious startup edge */
+  gpio_init_struct.gpio_pull = GPIO_PULL_UP;
   gpio_init(DOUT_RR_GPIO_PORT, &gpio_init_struct);
 
   scfg_exint_line_config(SCFG_PORT_SOURCE_GPIOB, SCFG_PINS_SOURCE1);
@@ -62,14 +67,17 @@ void wk_exint_config(void)
   exint_init_struct.line_enable = TRUE;
   exint_init_struct.line_mode = EXINT_LINE_INTERRUPUT;
   exint_init_struct.line_select = EXINT_LINE_1;
-  exint_init_struct.line_polarity = EXINT_TRIGGER_RISING_EDGE;
+  /* DOUT_RR idles high and drops low the instant a conversion is ready
+     (see wk_hx71708.c) */
+  exint_init_struct.line_polarity = EXINT_TRIGGER_FALLING_EDGE;
   exint_init(&exint_init_struct);
 
   /* configure the EXINT4 */
   gpio_default_para_init(&gpio_init_struct);
   gpio_init_struct.gpio_mode = GPIO_MODE_INPUT;
   gpio_init_struct.gpio_pins = DOUT_LL_PIN;
-  gpio_init_struct.gpio_pull = GPIO_PULL_NONE;
+  /* see DOUT_RR comment above - same reasoning */
+  gpio_init_struct.gpio_pull = GPIO_PULL_UP;
   gpio_init(DOUT_LL_GPIO_PORT, &gpio_init_struct);
 
   scfg_exint_line_config(SCFG_PORT_SOURCE_GPIOB, SCFG_PINS_SOURCE4);
@@ -78,7 +86,9 @@ void wk_exint_config(void)
   exint_init_struct.line_enable = TRUE;
   exint_init_struct.line_mode = EXINT_LINE_INTERRUPUT;
   exint_init_struct.line_select = EXINT_LINE_4;
-  exint_init_struct.line_polarity = EXINT_TRIGGER_RISING_EDGE;
+  /* DOUT_LL idles high and drops low the instant a conversion is ready
+     (see wk_hx71708.c) */
+  exint_init_struct.line_polarity = EXINT_TRIGGER_FALLING_EDGE;
   exint_init(&exint_init_struct);
 
   /* configure the EXINT6 */

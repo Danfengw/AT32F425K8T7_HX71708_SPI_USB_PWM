@@ -60,7 +60,7 @@ static void state_calibration_run(void)
       continue;
     }
 
-    if(wk_hx71708_is_ready((hx71708_channel_type)ch) && wk_hx71708_read_raw((hx71708_channel_type)ch, &sample))
+    if(wk_hx71708_get_sample((hx71708_channel_type)ch, &sample))
     {
       cal_accum[ch].sum += sample;
       cal_accum[ch].count++;
@@ -71,10 +71,20 @@ static void state_calibration_run(void)
         cal_accum[ch].done = 1;
       }
     }
+    else
+    {
+      wk_hx71708_check_stale((hx71708_channel_type)ch);
+    }
   }
 
   if(cal_accum[HX71708_CH_LL].done && cal_accum[HX71708_CH_RR].done)
   {
+    /* seed with the offset so the very first tared reading is 0 instead
+       of -offset (ch_raw[] is still zero-init at this point; the real
+       post-transition sample lands on the next state_normal_run() tick) */
+    ch_raw[HX71708_CH_LL] = ch_offset[HX71708_CH_LL];
+    ch_raw[HX71708_CH_RR] = ch_offset[HX71708_CH_RR];
+
     app_state = APP_STATE_NORMAL;
     return;
   }
@@ -97,9 +107,9 @@ static void state_normal_run(void)
 
   for(ch = 0; ch < HX71708_CH_NUM; ch++)
   {
-    if(wk_hx71708_is_ready((hx71708_channel_type)ch))
+    if(!wk_hx71708_get_sample((hx71708_channel_type)ch, &ch_raw[ch]))
     {
-      wk_hx71708_read_raw((hx71708_channel_type)ch, &ch_raw[ch]);
+      wk_hx71708_check_stale((hx71708_channel_type)ch);
     }
   }
 }

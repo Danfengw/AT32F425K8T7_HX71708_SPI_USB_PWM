@@ -15,8 +15,9 @@ extern "C" {
      task dispatcher. call once at startup, after wk_usb_app_init(). */
   void hx71708_app_init(void);
 
-  /* run one step of the load-cell task dispatcher and answer any pending
-     usb-cdc command frame. call every main loop iteration. */
+  /* run one step of the load-cell task dispatcher and, once per broadcast
+     period, push the current reading out the usb-cdc port unsolicited
+     (the host never has to ask). call every main loop iteration. */
   void hx71708_app_task(void);
 
 #ifdef __cplusplus

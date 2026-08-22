@@ -2,12 +2,12 @@
   **************************************************************************
   * @file     hx71708_app.c
   * @brief    hx71708 load-cell application layer: owns the usb-cdc
-  *           command/response protocol on top of wk_task's calibration/
-  *           normal/error state machine.
+  *           broadcast on top of wk_task's calibration/normal/error state
+  *           machine.
   *
-  * host -> device command frame: [header][cmd id][ctrl][cr][lf]
-  * device -> host response frame: [header][device id][status][ll raw
-  *           24-bit][rr raw 24-bit][cr][lf]
+  * device -> host broadcast frame (unsolicited, sent every
+  * HX71708_BROADCAST_INTERVAL_US regardless of whether the host asks):
+  *   [header][device id][status][ll raw 24-bit][rr raw 24-bit][cr][lf]
   **************************************************************************
   */
 
@@ -15,69 +15,42 @@
 #include "hx71708_app.h"
 #include "wk_hx71708.h"
 #include "wk_task.h"
+#include "wk_system.h"
 #include "usb_app.h"
-#include <string.h>
 
-/* host -> device command frame */
-#define HX71708_CMD_HEADER0       (uint8_t)(0x3A)
-#define HX71708_CMD_HEADER1       (uint8_t)(0x1A)
-#define HX71708_CMD_FRAME_SIZE    (5)
-#define HX71708_CMD_CTRL_READ     (uint8_t)(0x00)  /* request a reading */
-#define HX71708_CMD_CTRL_OFFSET   (uint8_t)(0x01)  /* request calibration offsets */
-
-/* device -> host response frame */
+/* device -> host broadcast frame */
 #define HX71708_RSP_HEADER0       (uint8_t)(0x3A)
 #define HX71708_RSP_HEADER1       (uint8_t)(0x2A)
 #define HX71708_RSP_FRAME_SIZE    (11)
 
-#define HX71708_RX_ACC_SIZE       (32)
+/* how often the current reading is pushed out the usb-cdc port,
+   unsolicited; matches the hx71708's own 10hz conversion rate */
+#define HX71708_BROADCAST_INTERVAL_US    (uint32_t)(100000)
 
 /**
-  * @brief  build and send the response frame for one parsed command.
-  * @param  ctrl: command byte from the host request (read vs offset query)
+  * @brief  build the broadcast frame for the current reading and send it
+  *         out the usb-cdc port (best-effort: dropped if the host isn't
+  *         keeping up, since the next broadcast supersedes it anyway).
+  * @param  none
   * @retval none
   */
-static void hx71708_handle_command(uint8_t ctrl)
+static void hx71708_broadcast(void)
 {
   uint8_t resp[HX71708_RSP_FRAME_SIZE];
   uint32_t v1, v2;
   int32_t t1, t2;
 
-  if(ctrl == HX71708_CMD_CTRL_READ)
-  {
-    resp[2] = wk_task_get_status_byte();
+  resp[2] = wk_task_get_status_byte();
 
-    if(wk_task_get_tared_reading(HX71708_CH_LL, &t1) && wk_task_get_tared_reading(HX71708_CH_RR, &t2))
-    {
-      v1 = (uint32_t)t1 & 0x00FFFFFFUL;
-      v2 = (uint32_t)t2 & 0x00FFFFFFUL;
-    }
-    else
-    {
-      v1 = 0;
-      v2 = 0;
-    }
-  }
-  else if(ctrl == HX71708_CMD_CTRL_OFFSET)
+  if(wk_task_get_tared_reading(HX71708_CH_LL, &t1) && wk_task_get_tared_reading(HX71708_CH_RR, &t2))
   {
-    /* offset-response marker; payload only valid once calibration is done */
-    resp[2] = APP_STATUS_CALIBRATING;
-
-    if(wk_task_get_status_byte() == APP_STATUS_NORMAL)
-    {
-      v1 = (uint32_t)wk_task_get_offset(HX71708_CH_LL) & 0x00FFFFFFUL;
-      v2 = (uint32_t)wk_task_get_offset(HX71708_CH_RR) & 0x00FFFFFFUL;
-    }
-    else
-    {
-      v1 = 0;
-      v2 = 0;
-    }
+    v1 = (uint32_t)t1 & 0x00FFFFFFUL;
+    v2 = (uint32_t)t2 & 0x00FFFFFFUL;
   }
   else
   {
-    /* unknown command: ignore silently */
-    return;
+    v1 = 0;
+    v2 = 0;
   }
 
   resp[0] = HX71708_RSP_HEADER0;
@@ -95,78 +68,18 @@ static void hx71708_handle_command(uint8_t ctrl)
 }
 
 /**
-  * @brief  drain any new usb-cdc rx bytes, resync/parse 5-byte command
-  *         frames out of them, and answer each one immediately.
+  * @brief  broadcast the current reading once every
+  *         HX71708_BROADCAST_INTERVAL_US, unprompted.
   * @param  none
   * @retval none
   */
-static void hx71708_process_usb_commands(void)
+static void hx71708_broadcast_task(void)
 {
-  static uint8_t rx_acc[HX71708_RX_ACC_SIZE];
-  static uint16_t rx_acc_len = 0;
-  uint8_t chunk[64];
-  uint16_t n;
+  static uint32_t broadcast_ticks;
 
-  n = wk_usb_cdc_recv(chunk);
-  if(n > 0)
+  if(wk_tick_elapsed_us(&broadcast_ticks, HX71708_BROADCAST_INTERVAL_US))
   {
-    if((uint16_t)(rx_acc_len + n) > sizeof(rx_acc))
-    {
-      /* overflow: drop what we have and resync on whatever arrives next */
-      rx_acc_len = 0;
-    }
-    else
-    {
-      memmove(&rx_acc[rx_acc_len], chunk, n);
-      rx_acc_len = (uint16_t)(rx_acc_len + n);
-    }
-  }
-
-  while(rx_acc_len >= HX71708_CMD_FRAME_SIZE)
-  {
-    uint16_t idx;
-    uint8_t found = 0;
-
-    for(idx = 0; (uint16_t)(idx + 1) < rx_acc_len; idx++)
-    {
-      if(rx_acc[idx] == HX71708_CMD_HEADER0 && rx_acc[idx + 1] == HX71708_CMD_HEADER1)
-      {
-        found = 1;
-        break;
-      }
-    }
-
-    if(!found)
-    {
-      /* keep the last byte in case a header started here */
-      rx_acc[0] = rx_acc[rx_acc_len - 1];
-      rx_acc_len = 1;
-      break;
-    }
-
-    if(idx > 0)
-    {
-      memmove(rx_acc, &rx_acc[idx], (size_t)(rx_acc_len - idx));
-      rx_acc_len = (uint16_t)(rx_acc_len - idx);
-    }
-
-    if(rx_acc_len < HX71708_CMD_FRAME_SIZE)
-    {
-      break;
-    }
-
-    if(rx_acc[3] != 0x0D || rx_acc[4] != 0x0A)
-    {
-      /* header bytes matched inside noise; resync by one byte */
-      memmove(rx_acc, &rx_acc[1], (size_t)(rx_acc_len - 1));
-      rx_acc_len--;
-      continue;
-    }
-
-    hx71708_handle_command(rx_acc[2]);
-
-    memmove(rx_acc, &rx_acc[HX71708_CMD_FRAME_SIZE], (size_t)(rx_acc_len - HX71708_CMD_FRAME_SIZE));
-    rx_acc_len = (uint16_t)(rx_acc_len - HX71708_CMD_FRAME_SIZE);
+    hx71708_broadcast();
   }
 }
 
@@ -183,8 +96,8 @@ void hx71708_app_init(void)
 }
 
 /**
-  * @brief  run one step of the load-cell task dispatcher and answer any
-  *         pending usb-cdc command frame.
+  * @brief  run one step of the load-cell task dispatcher and, once per
+  *         broadcast period, push the current reading out unsolicited.
   * @param  none
   * @retval none
   */
@@ -193,6 +106,5 @@ void hx71708_app_task(void)
   /* runs whichever state (calibration/normal/error) is currently active */
   wk_task_dispatch();
 
-  /* purely request/response: only ever transmits in reply to a host command */
-  hx71708_process_usb_commands();
+  hx71708_broadcast_task();
 }

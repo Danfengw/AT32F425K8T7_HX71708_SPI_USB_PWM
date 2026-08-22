@@ -29,6 +29,7 @@
 #include "usb_app.h"
 #include "wk_spi.h"
 #include "wk_usart.h"
+#include "wk_hx71708.h"
 /* private includes ----------------------------------------------------------*/
 /* add user code begin private includes */
 
@@ -240,7 +241,10 @@ void EXINT1_0_IRQHandler(void)
     /* add user code begin EXINT_LINE_1 */
     /* clear flag */
     exint_flag_clear(EXINT_LINE_1);
-    /* add user code end EXINT_LINE_1 */ 
+
+    /* DOUT_RR just dropped low: HX71708 RR conversion is ready */
+    wk_hx71708_dout_isr(HX71708_CH_RR);
+    /* add user code end EXINT_LINE_1 */
   }
 
   /* add user code begin EXINT1_0_IRQ 1 */
@@ -264,7 +268,10 @@ void EXINT15_4_IRQHandler(void)
     /* add user code begin EXINT_LINE_4 */
     /* clear flag */
     exint_flag_clear(EXINT_LINE_4);
-    /* add user code end EXINT_LINE_4 */ 
+
+    /* DOUT_LL just dropped low: HX71708 LL conversion is ready */
+    wk_hx71708_dout_isr(HX71708_CH_LL);
+    /* add user code end EXINT_LINE_4 */
   }
 
   if(exint_interrupt_flag_get(EXINT_LINE_6) != RESET)
@@ -272,7 +279,7 @@ void EXINT15_4_IRQHandler(void)
     /* add user code begin EXINT_LINE_6 */
     /* clear flag */
     exint_flag_clear(EXINT_LINE_6);
-    /* add user code end EXINT_LINE_6 */ 
+    /* add user code end EXINT_LINE_6 */
   }
 
   if(exint_interrupt_flag_get(EXINT_LINE_15) != RESET)
@@ -280,7 +287,7 @@ void EXINT15_4_IRQHandler(void)
     /* add user code begin EXINT_LINE_15 */
     /* clear flag */
     exint_flag_clear(EXINT_LINE_15);
-    /* add user code end EXINT_LINE_15 */ 
+    /* add user code end EXINT_LINE_15 */
   }
 
   /* add user code begin EXINT15_4_IRQ 1 */

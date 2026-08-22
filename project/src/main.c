@@ -38,6 +38,9 @@
 /* private includes ----------------------------------------------------------*/
 /* add user code begin private includes */
 #include "hx71708_app.h"
+#include "wk_power.h"
+#include "wk_motor.h"
+#include "st7789_app.h"
 /* add user code end private includes */
 
 /* private typedef -----------------------------------------------------------*/
@@ -118,6 +121,16 @@ int main(void)
 
   /* add user code begin 2 */
 
+  /* self-latch board power (PWR_EN) independent of the momentary SW1 press
+     that brought the board up */
+  wk_power_init();
+
+  /* arm the H3 motor-enable squeeze switch (MOTOR_EN_SW) */
+  wk_motor_init();
+
+  /* bring up the st7789 panel over spi1+dma */
+  st7789_app_init();
+
   /* bring up both hx71708 channels + the calibration/normal/error task dispatcher */
   hx71708_app_init();
 
@@ -128,6 +141,12 @@ int main(void)
     wk_usb_app_task();
 
     /* add user code begin 3 */
+
+    /* watch btn_1 for a long-press power-off */
+    wk_power_task();
+
+    /* watch the h3 motor-enable squeeze switch */
+    wk_motor_task();
 
     hx71708_app_task();
 

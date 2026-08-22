@@ -19,15 +19,26 @@ typedef enum
 
 /* exported functions ------------------------------------------------------- */
 
-  /* configure gpio pins used by both hx71708 channels and run the
-     power-up init pulse each chip needs before its first conversion */
+  /* configure gpio/exint for both hx71708 channels and run the power-up
+     init pulse each chip needs before its first conversion */
   void wk_hx71708_init(void);
 
-  /* returns 1 when the channel has a conversion ready to read, 0 otherwise */
-  uint8_t wk_hx71708_is_ready(hx71708_channel_type ch);
+  /* call from the DOUT falling-edge exint isr for this channel: masks
+     the line and sets a ready hint for wk_hx71708_get_sample() to
+     service. Does not touch the sensor itself - kept minimal so a
+     noisy/oscillating line can't turn into an isr storm. */
+  void wk_hx71708_dout_isr(hx71708_channel_type ch);
 
-  /* blocking: waits (with timeout) until the channel is ready, then reads it */
-  uint8_t wk_hx71708_read_raw(hx71708_channel_type ch, int32_t *raw_value);
+  /* call every main loop iteration: services ch's ready hint (if any) -
+     clocks out the conversion (~50us blocking) and re-arms the exint
+     line. 1 and fills *raw_value on an accepted sample, 0 otherwise
+     (nothing pending, or dropped as arriving too soon to be real) */
+  uint8_t wk_hx71708_get_sample(hx71708_channel_type ch, int32_t *raw_value);
+
+  /* call periodically (e.g. once per main loop): if ch hasn't produced a
+     sample within the datasheet-derived timeout, force-resets it and
+     returns 1; returns 0 otherwise */
+  uint8_t wk_hx71708_check_stale(hx71708_channel_type ch);
 
 #ifdef __cplusplus
 }

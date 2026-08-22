@@ -16,6 +16,7 @@ project/AT32_IDE/firmware/*.c
 project/AT32_IDE/middlewares/**/*.c
 project/AT32_IDE/usbd_class/*.c
 project/AT32_IDE/user/*.c
+project/AT32_IDE/st7789/*.c
 
 # Claude Code session/tooling metadata
 .claude/

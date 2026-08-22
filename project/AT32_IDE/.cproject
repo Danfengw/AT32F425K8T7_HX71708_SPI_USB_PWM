@@ -54,6 +54,7 @@
                                     <listOptionValue builtIn="false" value="&quot;../../../libraries/cmsis/cm4/device_support/&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../../libraries/cmsis/cm4/core_support/&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../../libraries/drivers/inc&quot;"/>
+                                    <listOptionValue builtIn="false" value="&quot;../../../libraries/st7789&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../inc&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../../middlewares/usb_drivers/inc&quot;"/>
                                 </option>
@@ -155,6 +156,7 @@
                                     <listOptionValue builtIn="false" value="&quot;../../../libraries/drivers/inc&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../../libraries/cmsis/cm4/core_support/&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../../libraries/cmsis/cm4/device_support/&quot;"/>
+                                    <listOptionValue builtIn="false" value="&quot;../../../libraries/st7789&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../inc&quot;"/>
                                     <listOptionValue builtIn="false" value="&quot;../../../middlewares/usb_drivers/inc&quot;"/>
                                 </option>
